@@ -1,0 +1,46 @@
+mode: standalone
+
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClass: csi-rbd-sc  # Specify your Ceph RBD storage class
+
+resources:
+  requests:
+    memory: 1Gi
+    cpu: 500m
+  limits:
+    memory: 2Gi
+    cpu: 1000m
+
+# Root credentials (newer MinIO versions use these)
+rootUser: "mnadmin"
+rootPassword: "mnpassword"  # Change this in production! (min 8 chars)
+
+service:
+  type: LoadBalancer
+  port: 9000
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 172.16.10.155
+    metallb.universe.tf/allow-shared-ip: "minio-helm-standalone"
+
+consoleService:
+  type: LoadBalancer
+  port: 9001
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 172.16.10.155             # Same IP!
+    metallb.universe.tf/allow-shared-ip: "minio-helm-standalone"   # Same key
+
+
+
+# Access MinIO:
+# API:     http://172.16.10.155:9000
+# Console: http://172.16.10.155:9001
+
+# Login credentials:
+# Username: mnadmin
+# Password: mnpassword
+
+# Uninstall:
+# helm uninstall minio -n minio-helm-standalone
+

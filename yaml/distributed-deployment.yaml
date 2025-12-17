@@ -1,0 +1,228 @@
+# ============================================
+# Namespace
+# ============================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio-yaml-distributed
+
+---
+# ============================================
+# Credentials
+# ============================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: minio-yaml-distributed
+type: Opaque
+stringData:
+  MINIO_ROOT_USER: "mnadmin"
+  MINIO_ROOT_PASSWORD: "mnpassword"   # CHANGE IN PRODUCTION!
+
+---
+# ============================================
+# Headless Service
+# (Required for StatefulSet pod discovery)
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: minio-yaml-distributed
+  labels:
+    app: minio
+spec:
+  clusterIP: None                 # Headless service for StatefulSet
+  publishNotReadyAddresses: true  # Important for distributed MinIO
+  ports:
+    - port: 9000
+      name: api
+    - port: 9001
+      name: console
+  selector:
+    app: minio
+
+---
+# ============================================
+# Regular ClusterIP Service
+# (For internal cluster access)
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-svc
+  namespace: minio-yaml-distributed
+  labels:
+    app: minio
+spec:
+  selector:
+    app: minio
+  type: ClusterIP
+  ports:
+  - name: api
+    port: 9000
+    targetPort: 9000
+    protocol: TCP
+  - name: console
+    port: 9001
+    targetPort: 9001
+    protocol: TCP
+
+---
+# ============================================
+# StatefulSet
+# (4-node distributed MinIO cluster)
+# ============================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: minio-yaml-distributed
+  labels:
+    app: minio
+spec:
+  serviceName: minio  # References the headless service
+  replicas: 4
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values: [minio]
+            topologyKey: kubernetes.io/hostname    
+      containers:
+      - name: minio
+        #image: minio/minio:latest                                  # Public, with console functionality "pulled" by Minio
+        image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z     # Forked witth console functionality "built-in"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        args:
+        - server
+        -  http://minio-{0...3}.minio.minio-yaml-distributed.svc/data
+        - --console-address
+        - :9001
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: MINIO_ROOT_USER
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: MINIO_ROOT_PASSWORD
+        - name: MINIO_DOMAIN
+          value: "af-south-1"
+        ports:
+        - containerPort: 9000
+          name: api
+        - containerPort: 9001
+          name: console
+        resources:
+          requests:
+            memory: 1Gi
+            cpu: 1000m
+          limits:
+            memory: 2Gi
+            cpu: 2000m
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /minio/health/live
+            port: 9000
+          initialDelaySeconds: 120
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /minio/health/ready
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      storageClassName: csi-rbd-sc
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 20Gi
+
+
+---
+# ============================================
+# LoadBalancer Service
+# (External access via MetalLB)
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-lb
+  namespace: minio-yaml-distributed
+  labels:
+    app: minio
+  annotations:
+    metallb.universe.tf/address-pool: default-pool  # Use your MetalLB address pool name
+    metallb.universe.tf/loadBalancerIPs: 172.16.10.158  # Optional: specify exact IP
+    metallb.universe.tf/allow-shared-ip: "minio-yaml-distributed-shared"
+spec:
+  type: LoadBalancer
+  selector:
+    app: minio
+  ports:
+  - name: api
+    port: 9000
+    targetPort: api
+    protocol: TCP
+  - name: console
+    port: 9001
+    targetPort: console
+    protocol: TCP
+
+
+
+# Access via ClusterIP service (from within cluster)
+# kubectl run -it --rm minio-test --image=minio/mc --restart=Never -n minio-yaml-distributed -- \
+#   /bin/sh -c "mc alias set myminio http://172.16.10.158:9000 mnadmin mnpassword && mc admin info myminio"
+
+# Deployment commands:
+# kubectl apply -f distributed-deployment.yaml
+
+# Verify deployment:
+# kubectl logs -f minio-0 -n minio-yaml-distributed -c wait-for-dns
+# kubectl logs -f minio-0 -n minio-yaml-distributed -c minio
+# kubectl get deployment -n minio-yaml-distributed
+# kubectl get pods -n minio-yaml-distributed
+# kubectl get pvc -n minio-yaml-distributed
+# kubectl get svc -n minio-yaml-distributed
+# kubectl describe statefulset.apps/minio -n minio-helm-distributed
+
+# Check MinIO logs:
+# kubectl logs -f deployment/minio -n minio-yaml-distributed
+
+# Access MinIO:
+# API:      http://172.16.10.158:9000
+# Console:  http://172.16.10.158:9001
+
+# Login credentials:
+# Username: mnadmin
+# Password: mnpassword

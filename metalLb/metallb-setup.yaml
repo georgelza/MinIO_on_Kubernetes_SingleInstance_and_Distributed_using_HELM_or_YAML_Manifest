@@ -1,0 +1,51 @@
+
+---
+# ============================================
+# MetalLB Installation (v0.14.x)
+# ============================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: controller
+  namespace: metallb-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: speaker
+  namespace: metallb-system
+
+---
+# ============================================
+# MetalLB Configuration - IPAddressPool
+# IMPORTANT: Adjust the IP range to match your network!
+# ============================================
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  # Option A: Use a range from your existing network
+  - 172.16.10.150-172.16.10.180
+  
+  # Option B: Or use CIDR notation
+  # - 172.16.10.0/24
+  
+  # If you have multiple subnets, you can add more:
+  # - 172.16.30.150-172.16.30.180
+  # - 172.16.40.150-172.16.40.180
+
+---
+# ============================================
+# MetalLB L2Advertisement (Layer 2 mode - simplest)
+# ============================================
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - default-pool

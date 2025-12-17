@@ -1,0 +1,161 @@
+# ============================================
+# Namespace
+# ============================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio-yaml-standalone
+
+---
+# ============================================
+# Credentials
+# ============================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: minio-yaml-standalone
+type: Opaque
+stringData:
+  MINIO_ROOT_USER: "mnadmin"
+  MINIO_ROOT_PASSWORD: "mnpassword"   # CHANGE IN PRODUCTION!
+
+
+---
+# ============================================
+# Deployment
+# ============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: minio-yaml-standalone
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        #image: minio/minio:latest                                  # Public, with console functionality "pulled" by Minio
+        image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z     # Forked witth console functionality "built-in"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        args:
+        - server
+        - /data
+        - --console-address
+        - ":9001"
+        envFrom:
+        - secretRef:
+            name: minio-credentials
+        ports:
+        - containerPort: 9000
+          name: api
+        - containerPort: 9001
+          name: console
+        resources:
+          requests:
+            memory: 1Gi
+            cpu: 1000m
+          limits:
+            memory: 2Gi
+            cpu: 2000m
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /minio/health/live
+            port: 9000
+          initialDelaySeconds: 60
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /minio/health/ready
+            port: 9000
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 5
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: minio-data
+
+---
+# ============================================
+# PVC
+# ============================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: minio-yaml-standalone
+spec:
+  storageClassName: csi-rbd-sc
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi   # increased for real use
+
+---
+# ============================================
+# LoadBalancer Service
+# (External access via MetalLB)
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-lb
+  namespace: minio-yaml-standalone
+  labels:
+    app: minio  
+  annotations:
+    metallb.universe.tf/address-pool: default-pool          # Use your MetalLB address pool name
+    metallb.universe.tf/loadBalancerIPs: 172.16.10.157
+    metallb.universe.tf/allow-shared-ip: "minio-standalone-shared"
+spec:
+  type: LoadBalancer
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: api
+      protocol: TCP
+    - name: console
+      port: 9001
+      targetPort: console
+      protocol: TCP
+
+
+# Deployment commands:
+# kubectl apply -f standalone-deployment.yaml
+
+# Verify deployment:
+# kubectl logs -f minio -n minio-yaml-standalone -c wait-for-dns
+# kubectl logs -f minio -n minio-yaml-standalone -c minio
+# kubectl get deployment -n minio-yaml-standalone
+# kubectl get pods -n minio-yaml-standalone
+# kubectl get pvc -n minio-yaml-standalone
+# kubectl get svc -n minio-yaml-standalone
+
+# Check MinIO logs:
+# kubectl logs -f deployment/minio -n minio-yaml-standalone
+
+# Access MinIO:
+# API:      http://172.16.10.157:9000
+# Console:  http://172.16.10.157:9001
+
+# Login credentials:
+# Username: mnadmin
+# Password: mnpassword

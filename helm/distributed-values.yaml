@@ -1,0 +1,60 @@
+mode: distributed  # Multi-node setup for HA and performance
+
+# ============================================
+# Number of MinIO instances (must be 4, 8, 12, 16, etc. - multiples of 4)
+# ============================================
+replicas: 4
+
+clusterDomain: k8s-prd-1
+
+persistence:
+  enabled: true
+  size: 20Gi    # This will result in 20Gi * 4 = 80Gi total storage across 4 pods allocated
+  # Each pod will get its own PVC
+  # Best choice for MinIO - RBD provides block storage which is what MinIO expects
+  #storageClass: ""  # Use default storage class, current is 'csi-rbd-sc'
+  # or specify yours
+  storageClass: csi-cephfs-sc 
+  accessMode: ReadWriteOnce       # RBD supports RWO
+  
+
+resources:
+  requests:
+    memory: 2Gi
+    cpu: 2000m
+
+# ============================================
+# Credentials - consider using secrets in production
+# ============================================
+rootUser: "mnadmin"
+rootPassword: "mnpassword"  # Change this in production! (min 8 chars)
+
+service:
+  type: LoadBalancer
+  port: 9000
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 172.16.10.156
+    metallb.universe.tf/allow-shared-ip: "minio-helm-distributed"
+
+consoleService:
+  type: LoadBalancer
+  port: 9001
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 172.16.10.156              # Same IP!
+    metallb.universe.tf/allow-shared-ip: "minio-helm-distributed"   # Same key
+
+# ============================================
+# Pod anti-affinity to spread pods across nodes (recommended for HA)
+# ============================================
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - minio
+          topologyKey: kubernetes.io/hostname
