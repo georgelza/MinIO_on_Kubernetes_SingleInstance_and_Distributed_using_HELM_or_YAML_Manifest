@@ -3,7 +3,7 @@
 
 This started with my required for a [MinIO](https://www.min.io/) deployment as part of a larger lab build, and wanting to deploy it onto my [Kubespray](https://github.com/kubespray) based Kubernetes cluster vs previous local docker-compose service.
 
-[Github]()
+[Github](https://github.com/georgelza/MinIO_on_Kubernetes_SingleInstance_and_Distributed_using_HELM_or_YAML_Manifest.git)
 
 
 ### Requirements
