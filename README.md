@@ -15,18 +15,18 @@ This started with my required for a [MinIO](https://www.min.io/) deployment as p
 - MetalLb Load balancer - see `metallb/README.md` for deployment.
 
 
-You will see I demostrate 2 deployment patterns:
+You will see I demonstrate 2 deployment patterns:
 
-- HELM based and 
+- HELM based, (see `helm/README.md`)
 
-- YAML/Manifest file based. 
+- YAML/Manifest file based, (see `yaml/README.md`)
 
 For each I then also show a single stand alone deployment and then a 4 node distributed deployment (note you will need at min 4 worker nodes in your K8s cluster, or need to modify the pod placement via the affinity block from `requiredDuringSchedulingIgnoredDuringExecution` to `preferredDuringSchedulingIgnoredDuringExecution`).
 
 
 ### CoreDNS
 
-Also found I needed to modify my coreDNS configuration, required to add my cluster name (k8s-prd-1) and specified my internal edge router as primary local dns (located on 172.16.10.1).
+Also found I needed to modify my [coreDNS](https://coredns.io) configuration, required to add my cluster name (k8s-prd-1) and specified my internal edge router as primary local dns (located on 172.16.10.1).
 
 
 ```bash
