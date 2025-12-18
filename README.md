@@ -74,3 +74,9 @@ For both the standalone and distributed deployment see `helm/README.md`.
 For both the standalone and distributed deployment see `yaml/README.md`.
 
 
+## By: George Leonard
+
+- georgelza@gmail.com
+- https://www.linkedin.com/in/george-leonard-945b502/
+- https://medium.com/@georgelza
+
